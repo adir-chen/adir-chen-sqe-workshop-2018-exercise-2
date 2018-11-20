@@ -55,7 +55,7 @@ function parseIfStatement(codegen){
     else
         dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'else if statement', '', escodegen.generate(codegen.test), ''));
     parseJson(codegen.consequent);
-    elseIfCond = true;
+    elseIfCond = !(codegen.alternate && codegen.alternate.type == 'BlockStatement');
     parseJson(codegen.alternate);
     elseIfCond = false;
 }
