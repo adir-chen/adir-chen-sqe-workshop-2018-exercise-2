@@ -1,109 +1,151 @@
-// import * as esprima from 'esprima';
+import * as esprima from 'esprima';
 import * as escodegen from 'escodegen';
+export {init, checkGlobalVars, symSubstitution, globBeforeFunc, globAfterFunc, localVarDict};
 
-
-// const parseCode = (codeToParse) => {
-//     return esprima.parseScript(codeToParse);
-// };
-
-let dataArr = [];
-let elseIfCond = false;
+let localVarDict = {};
+let rowNo = 0;
+let globBeforeFunc = [];
+let globAfterFunc = [];
 
 function init(){
-    dataArr = [];
-    elseIfCond = false;
+    localVarDict = {};
+    globBeforeFunc = [];
+    globAfterFunc = [];
 }
-class IdentifierDetails {
-    constructor(line, type, idName, condition, value) {
-        this.line = line;
-        this.type = type;
-        this.idName = idName;
-        this.condition = condition;
-        this.value = value;
+
+function replaceLocalVars(codegen){
+    for (var key in localVarDict)
+        codegen = codegen.replace(key, localVarDict[key]);
+    return codegen;
+}
+
+function parseVariableDeclaration(codegen, root) {
+    for (var variableDecl in codegen.declarations) {
+        localVarDict[codegen.declarations[variableDecl].id.name] = '(' + replaceLocalVars(escodegen.generate(codegen.declarations[variableDecl].init)) + ')';
+    }
+    deleteFromRoot(codegen, root, true);
+}
+
+function parseExpressionStatement(codegen, root){
+    if ((escodegen.generate(codegen.expression.left) in localVarDict)){
+        localVarDict[escodegen.generate(codegen.expression.left)] = '(' + replaceLocalVars(escodegen.generate(codegen.expression.right)) + ')';
+        try {
+            localVarDict[escodegen.generate(codegen.expression.left)] = eval(localVarDict[escodegen.generate(codegen.expression.left)]);
+        } catch (e){
+            e.toString();
+        }
+        deleteFromRoot(codegen, root, false);
+    }
+    else{
+        codegen.expression.right = esprima.parseScript(replaceLocalVars(escodegen.generate(codegen.expression.right))).body[0].expression;
+    }
+
+}
+
+function deleteFromRoot(codegen, root, toDel){
+    for (var row in root){
+        if (JSON.stringify(root[row]) ===  JSON.stringify(codegen)){
+            root.splice(row, 1);
+            toDel == true ? rowNo-- : rowNo;
+        }
     }
 }
-function parseFunctionDeclaration(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'function declaration', codegen.id.name, '', ''));
-    for (var param in codegen.params)
-        parseJson(codegen.params[param]);
+
+function parseBlockStatement(codegen, root){
+    let tempDict = {};
+    Object.assign(tempDict, localVarDict);
+    for (var row in codegen.body) {
+        symSubstitution(codegen.body[row], root);
+    }
+    Object.assign(localVarDict, tempDict);
 }
 
-function parseIdentifier(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'variable declaration', codegen.name, '', ''));
+function parseWhileStatement(codegen, root){
+    codegen.test = esprima.parseScript(replaceLocalVars(escodegen.generate(codegen.test))).body[0].expression;
+    let tempDict = {};
+    Object.assign(tempDict, localVarDict);
+    symSubstitution(codegen.body, root);
+    Object.assign(localVarDict, tempDict);
 }
 
-function parseVariableDeclarator(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'variable declaration', codegen.id.name, '', codegen.init == undefined ? '' :codegen.init.value));
-}
-
-function parseVariableDeclaration(codegen){
-    for (var variableDecl in codegen.declarations)
-        parseJson(codegen.declarations[variableDecl]);
-}
-
-function parseExpressionStatement(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'assignment expression', codegen.expression.left.name, '', escodegen.generate(codegen.expression.right)));
-}
-
-function parseWhileStatement(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'while statement', '', escodegen.generate(codegen.test), ''));
-}
-
-function parseIfStatement(codegen){
-    if (!elseIfCond)
-        dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'if statement', '', escodegen.generate(codegen.test), ''));
-    else
-        dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'else if statement', '', escodegen.generate(codegen.test), ''));
-    parseJson(codegen.consequent);
-    elseIfCond = !(codegen.alternate && codegen.alternate.type == 'BlockStatement');
-    parseJson(codegen.alternate);
-    elseIfCond = false;
-}
-
-function parseForStatement(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'for statement', '', escodegen.generate(codegen.init) + ' ' + escodegen.generate(codegen.test) + '; ' + escodegen.generate(codegen.update), ''));
+function parseIfStatement(codegen, root){
+    codegen.test = esprima.parseScript(replaceLocalVars(escodegen.generate(codegen.test))).body[0].expression;
+    let tempDict = {};
+    Object.assign(tempDict, localVarDict);
+    symSubstitution(codegen.consequent, root);
+    Object.assign(localVarDict, tempDict);
+    symSubstitution(codegen.alternate, root);
 }
 
 function parseReturnStatement(codegen){
-    dataArr.push(new IdentifierDetails(codegen.loc.start.line, 'return statement', '', '', escodegen.generate(codegen.argument)));
+    codegen.argument = esprima.parseScript(replaceLocalVars(escodegen.generate(codegen.argument))).body[0].expression;
 }
 
 let dictDataType = {
-    'FunctionDeclaration': parseFunctionDeclaration,
-    'Identifier': parseIdentifier,
     'VariableDeclaration': parseVariableDeclaration,
-    'VariableDeclarator' : parseVariableDeclarator,
     'ExpressionStatement': parseExpressionStatement,
-    'WhileStatement': parseWhileStatement,
-    'IfStatement': parseIfStatement,
-    'ForStatement' : parseForStatement,
+    'BlockStatement' : parseBlockStatement,
+    'WhileStatement' : parseWhileStatement,
+    'IfStatement' : parseIfStatement,
     'ReturnStatement': parseReturnStatement,
 };
 
-function existsType(codengen) {
-    return codengen != null && codengen.hasOwnProperty('type') && dictDataType[codengen.type];
+function searchForType(codengen) {
+    return codengen != null && codengen.type in dictDataType;
 }
 
 function existsProperty(codengen) {
     return codengen != null && codengen.hasOwnProperty('body');
 }
 
-function parseJson(codegen){
-    if (existsType(codegen))
-        dictDataType[codegen.type](codegen);
-    if (existsProperty(codegen)){
-        if(Array.isArray(codegen.body))
-            for (var row in codegen.body)
-                parseJson(codegen.body[row]);
-        else
-            parseJson(codegen.body);
+function bodySubstitution(codegen) {
+    if (Array.isArray(codegen.body)) {
+        for (rowNo = 0; rowNo < codegen.body.length; rowNo++) {
+            symSubstitution(codegen.body[rowNo], codegen.body);
+            if (codegen.type == 'Program') return codegen;
+        }
+    }
+    else {
+        symSubstitution(codegen.body, codegen);
     }
 }
 
-function getDataArr(){
-    return dataArr;
+function symSubstitution(codegen, root=null){
+    if (searchForType(codegen)) {
+        dictDataType[codegen.type](codegen, root);
+    }
+    if (existsProperty(codegen)){
+        let res = bodySubstitution(codegen) ;
+        if (codegen.type == 'Program') return res;
+    }
 }
-export {IdentifierDetails};
-export {parseJson};
-export {getDataArr};
-export {init};
+
+function checkGlobalVars(codeToParse){
+    let funcIndex;
+    let i = 0;
+    while (codeToParse.body[i] && codeToParse.body[i].type != 'FunctionDeclaration'){
+        globBeforeFunc.push(codeToParse.body[i]);
+        i++;
+    }
+    funcIndex = i;
+    i++;
+    while (codeToParse.body[i]) {
+        globAfterFunc.push(codeToParse.body[i]);
+        i++;
+    }
+    addGlobalVarsToDict();
+    return esprima.parseScript(escodegen.generate(codeToParse.body[funcIndex]));
+}
+
+function addGlobalVarsToDict(){
+    for (var i = 0; i < globBeforeFunc.length; i++) {
+        for (var globVarBef in  globBeforeFunc[i].declarations) {
+            localVarDict[globBeforeFunc[i].declarations[globVarBef].id.name] = escodegen.generate(globBeforeFunc[i].declarations[globVarBef].init);
+        }
+    }
+    for (var j = 0; j < globAfterFunc.length; j++) {
+        for (var globVarAfter in  globAfterFunc[j].declarations) {
+            localVarDict[globAfterFunc[j].declarations[globVarAfter].id.name] = escodegen.generate(globAfterFunc[j].declarations[globVarAfter].init);
+        }
+    }
+}
