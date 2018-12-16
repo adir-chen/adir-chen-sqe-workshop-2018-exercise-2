@@ -15,18 +15,22 @@ function init(){
 
 function replaceLocalVars(codegen){
     for (var key in localVarDict)
-        codegen = codegen.replace(key, localVarDict[key]);
+        while (codegen.includes(key))
+            codegen = codegen.replace(key, localVarDict[key]);
     return codegen;
 }
 
 function parseVariableDeclaration(codegen, root) {
     for (var variableDecl in codegen.declarations) {
         if (codegen.declarations[variableDecl].init.type == 'ArrayExpression')
-            for (let i = 0; i < codegen.declarations[variableDecl].init.elements.length; i++){
+            for (let i = 0; i < codegen.declarations[variableDecl].init.elements.length; i++) {
                 localVarDict[codegen.declarations[variableDecl].id.name + '[' + i + ']'] = '(' + replaceLocalVars(escodegen.generate(codegen.declarations[variableDecl].init.elements[i])) + ')';
+                evalVar(codegen.declarations[variableDecl].id.name + '[' + i + ']');
             }
-        else
+        else {
             localVarDict[codegen.declarations[variableDecl].id.name] = '(' + replaceLocalVars(escodegen.generate(codegen.declarations[variableDecl].init)) + ')';
+            evalVar(codegen.declarations[variableDecl].id.name);
+        }
     }
     deleteFromRoot(codegen, root, true);
 }
@@ -167,11 +171,3 @@ function addGlobalVarsToDict(){
         }
     }
 }
-
-// function replaceEnterInArr(codegen){
-//     if (codegen.includes('['))
-//         while (codegen.includes('\n')){
-//             codegen = codegen.replace('\n', '');
-//         }
-//     return codegen;
-// }

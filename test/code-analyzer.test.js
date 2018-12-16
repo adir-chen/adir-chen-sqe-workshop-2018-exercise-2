@@ -400,7 +400,7 @@ describe('The javascript parser', () => {
 function buildCodeTest8(){
     return esprima.parseScript('function f(x){\n' +
         '  let a = [1,2,3]\n' +
-        '  return a[0]\n' +
+            '  return a[0]\n' +
         '\n' +
         '}');
 }
