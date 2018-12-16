@@ -346,3 +346,85 @@ describe('The javascript parser', () => {
         assert(red.includes(3));
     });
 });
+
+function buildCodeTest7(){
+    return esprima.parseScript('function f(x, y, z){\n' +
+        '  let a = x + 1\n' +
+        '  a = [4,5,6]\n' +
+        '  if (a[2] > y){\n' +
+        '     a[2] = 2\n' +
+        '     x = x + 1\n' +
+        '  }\n' +
+        '  return a[2] + x;\n' +
+        '}');
+}
+
+function buildCodeAfterSymSubsTest7(){
+    return esprima.parseScript('function f(x, y, z) {\n' +
+        '    if (6 > y) {\n' +
+        '        x = x + 1;\n' +
+        '    }\n' +
+        '    return 6 + x;\n' +
+        '}');
+}
+
+describe('The javascript parser', () => {
+    it('test17', () => {
+        init();
+        assert.deepEqual(symSubstitution(checkGlobalVars(buildCodeTest7())), buildCodeAfterSymSubsTest7());
+        assert(globBeforeFunc.length == 0);
+        assert(globAfterFunc.length == 0);
+    });
+});
+
+describe('The javascript parser', () => {
+    it('test18', () => {
+        initColorsArr();
+        findLinesToBeColored(symSubstitution(checkGlobalVars(buildCodeTest7())), '1, 1,[1,3]');
+        assert(red.length == 0);
+        assert(green.length == 1);
+        assert(green.includes(2));
+    });
+});
+
+describe('The javascript parser', () => {
+    it('test19', () => {
+        initColorsArr();
+        findLinesToBeColored(symSubstitution(checkGlobalVars(buildCodeTest7())), '1, 7,[1,3]');
+        assert(red.length == 1);
+        assert(green.length == 0);
+        assert(red.includes(2));
+    });
+});
+
+function buildCodeTest8(){
+    return esprima.parseScript('function f(x){\n' +
+        '  let a = [1,2,3]\n' +
+        '  return a[0]\n' +
+        '\n' +
+        '}');
+}
+
+function buildCodeAfterSymSubsTest8(){
+    return esprima.parseScript('function f(x) {\n' +
+        '    return 1;\n' +
+        '}');
+}
+
+describe('The javascript parser', () => {
+    it('test20', () => {
+        init();
+        assert.deepEqual(symSubstitution(checkGlobalVars(buildCodeTest8())), buildCodeAfterSymSubsTest8());
+        assert(globBeforeFunc.length == 0);
+        assert(globAfterFunc.length == 0);
+    });
+});
+
+describe('The javascript parser', () => {
+    it('test21', () => {
+        initColorsArr();
+        findLinesToBeColored(symSubstitution(checkGlobalVars(buildCodeTest8())), '1');
+        assert(red.length == 0);
+        assert(green.length == 0);
+    });
+});
